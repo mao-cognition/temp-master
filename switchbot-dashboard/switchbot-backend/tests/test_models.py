@@ -163,7 +163,7 @@ class TestImportReadingData:
             humidity=60,
             battery=85,
         )
-        assert reading.timestamp == "2024-01-01T12:00:00Z"
+        assert reading.timestamp == datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
         assert reading.temperature == 25.5
         assert reading.humidity == 60
         assert reading.battery == 85

@@ -10,6 +10,9 @@ from fastapi.testclient import TestClient
 
 os.environ["SWITCHBOT_TOKEN"] = ""
 os.environ["SWITCHBOT_SECRET"] = ""
+# 管理系 API（/api/import, /api/backup）のテスト用固定キー
+TEST_ADMIN_API_KEY = "test-admin-key"
+os.environ["ADMIN_API_KEY"] = TEST_ADMIN_API_KEY
 
 from app.main import (
     DB_PATH,
@@ -156,3 +159,8 @@ def mock_switchbot_credentials():
     with patch("app.main.SWITCHBOT_TOKEN", "test-token"), \
          patch("app.main.SWITCHBOT_SECRET", "test-secret"):
         yield
+
+
+@pytest.fixture
+def admin_headers() -> dict:
+    return {"X-API-Key": TEST_ADMIN_API_KEY}

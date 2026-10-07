@@ -12,6 +12,8 @@
 # Configuration:
 #   Set SWITCHBOT_BACKEND_URL environment variable or edit the default below
 #   Set BACKUP_DIR environment variable to change the backup directory
+#   BACKUP_API_KEY（必須）: バックエンドの ADMIN_API_KEY と同じ値。X-API-Key ヘッダで送信する
+#     例: BACKUP_API_KEY=xxxx ./backup_database.sh
 
 BACKEND_URL="${SWITCHBOT_BACKEND_URL:-https://temp-master.fly.dev}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/switchbot_backups}"
@@ -43,6 +45,7 @@ while [[ $# -gt 0 ]]; do
             echo "Environment variables:"
             echo "  SWITCHBOT_BACKEND_URL  Backend URL (default: https://temp-master.fly.dev)"
             echo "  BACKUP_DIR             Backup directory (default: ~/switchbot_backups)"
+            echo "  BACKUP_API_KEY         必須。バックエンドの ADMIN_API_KEY と同じ値（X-API-Key ヘッダで送信）"
             exit 0
             ;;
         *)
@@ -53,6 +56,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# 未設定のまま curl を実行しても 401 になるだけなので、先に止める
+: "${BACKUP_API_KEY:?BACKUP_API_KEY を設定してください}"
+
 mkdir -p "$BACKUP_DIR"
 
 backup_database() {
@@ -61,7 +67,7 @@ backup_database() {
     
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting backup..."
     
-    local http_code=$(curl -s -w "%{http_code}" -o "$backup_file" "$BACKEND_URL/api/backup")
+    local http_code=$(curl -s -w "%{http_code}" -o "$backup_file" -H "X-API-Key: ${BACKUP_API_KEY:?BACKUP_API_KEY を設定してください}" "$BACKEND_URL/api/backup")
     
     if [ "$http_code" -eq 200 ]; then
         local file_size=$(ls -lh "$backup_file" | awk '{print $5}')
