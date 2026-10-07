@@ -77,6 +77,15 @@ The frontend is served at `http://localhost:8000/` and the API docs at `http://l
 - Charts: Canvas elements rendered with Chart.js line charts
 - Refresh Data button triggers data reload
 
+### Mock vs. real API
+- `npm run dev:mock -- --host 0.0.0.0 --port 5173` shows a MOCK DATA badge: 8 meters (6 active, 2 stale). `?scenario=unconfigured|rate-limited|error` reproduces the abnormal states.
+- `unconfigured`: Refresh Data fails, but the badge stays Connected because the API is reachable. `error`: badge shows Disconnected.
+- Without SwitchBot credentials the real API is `configured: false`. Do not report mock checks as real-device verification.
+- Check narrow widths (360–400px): the navbar (MOCK DATA, theme switcher, Connected badge) must not overflow (`scrollWidth <= clientWidth`).
+
+### Japanese fonts
+- If Japanese renders as tofu, install `fonts-noto-cjk` (`fc-match 'Noto Sans CJK JP'` to check). A running Chrome may need a restart (`chrome://restart`) before it picks up the font.
+
 ## Running Backend Tests
 
 ```bash
