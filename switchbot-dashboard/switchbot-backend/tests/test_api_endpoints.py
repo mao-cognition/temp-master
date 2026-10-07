@@ -350,7 +350,7 @@ class TestGetStatusEndpoint:
 
 
 class TestImportDataEndpoint:
-    async def test_import_data_creates_devices(self, client, reset_data_store, temp_db_path):
+    async def test_import_data_creates_devices(self, client, reset_data_store, temp_db_path, admin_headers):
         original_db_path = main_module.DB_PATH
         main_module.DB_PATH = temp_db_path
         
@@ -372,7 +372,7 @@ class TestImportDataEndpoint:
                 ]
             }
             
-            response = client.post("/api/import", json=import_data)
+            response = client.post("/api/import", json=import_data, headers=admin_headers)
             
             assert response.status_code == 200
             data = response.json()
@@ -385,7 +385,7 @@ class TestImportDataEndpoint:
         finally:
             main_module.DB_PATH = original_db_path
 
-    async def test_import_data_creates_readings(self, client, reset_data_store, temp_db_path):
+    async def test_import_data_creates_readings(self, client, reset_data_store, temp_db_path, admin_headers):
         original_db_path = main_module.DB_PATH
         main_module.DB_PATH = temp_db_path
         
@@ -416,7 +416,7 @@ class TestImportDataEndpoint:
                 ]
             }
             
-            response = client.post("/api/import", json=import_data)
+            response = client.post("/api/import", json=import_data, headers=admin_headers)
             
             assert response.status_code == 200
             data = response.json()
@@ -425,7 +425,7 @@ class TestImportDataEndpoint:
         finally:
             main_module.DB_PATH = original_db_path
 
-    async def test_import_data_multiple_devices(self, client, reset_data_store, temp_db_path):
+    async def test_import_data_multiple_devices(self, client, reset_data_store, temp_db_path, admin_headers):
         original_db_path = main_module.DB_PATH
         main_module.DB_PATH = temp_db_path
         
@@ -449,7 +449,7 @@ class TestImportDataEndpoint:
                 ]
             }
             
-            response = client.post("/api/import", json=import_data)
+            response = client.post("/api/import", json=import_data, headers=admin_headers)
             
             assert response.status_code == 200
             data = response.json()
@@ -460,12 +460,171 @@ class TestImportDataEndpoint:
         finally:
             main_module.DB_PATH = original_db_path
 
-    def test_import_data_empty_devices(self, client, reset_data_store):
+    def test_import_data_empty_devices(self, client, reset_data_store, admin_headers):
         import_data = {"devices": []}
         
-        response = client.post("/api/import", json=import_data)
+        response = client.post("/api/import", json=import_data, headers=admin_headers)
         
         assert response.status_code == 200
         data = response.json()
         assert data["imported_devices"] == 0
         assert data["imported_readings"] == 0
+
+
+def _valid_import_payload() -> dict:
+    return {
+        "devices": [
+            {
+                "device_id": "device-001",
+                "device_name": "Imported Meter",
+                "device_type": "Meter",
+                "readings": [
+                    {
+                        "timestamp": "2024-01-01T12:00:00Z",
+                        "temperature": 25.5,
+                        "humidity": 60,
+                        "battery": 85,
+                    }
+                ],
+            }
+        ]
+    }
+
+
+class TestImportDataAuth:
+    def test_import_without_api_key_returns_401(self, client):
+        response = client.post("/api/import", json=_valid_import_payload())
+
+        assert response.status_code == 401
+        assert "device-001" not in data_store.devices
+
+    def test_import_with_wrong_api_key_returns_401(self, client):
+        response = client.post(
+            "/api/import", json=_valid_import_payload(), headers={"X-API-Key": "wrong-key"}
+        )
+
+        assert response.status_code == 401
+        assert "device-001" not in data_store.devices
+
+    def test_import_with_non_ascii_api_key_returns_401(self, client):
+        response = client.post(
+            "/api/import",
+            json=_valid_import_payload(),
+            headers={"X-API-Key": "キー".encode("utf-8")},
+        )
+
+        assert response.status_code == 401
+
+    def test_import_when_admin_key_not_configured_returns_503(self, client, admin_headers, monkeypatch):
+        monkeypatch.setattr(main_module, "ADMIN_API_KEY", "")
+
+        response = client.post("/api/import", json=_valid_import_payload(), headers=admin_headers)
+
+        assert response.status_code == 503
+        assert "device-001" not in data_store.devices
+
+    def test_import_with_valid_api_key_returns_200(self, client, admin_headers):
+        response = client.post("/api/import", json=_valid_import_payload(), headers=admin_headers)
+
+        assert response.status_code == 200
+        assert response.json()["imported_readings"] == 1
+        assert "device-001" in data_store.devices
+
+
+class TestImportDataValidation:
+    @pytest.mark.parametrize(
+        "device_id",
+        ["../x", "", "a" * 65, "dev ice", "dev/ice"],
+    )
+    def test_invalid_device_id_returns_422(self, client, admin_headers, device_id):
+        payload = _valid_import_payload()
+        payload["devices"][0]["device_id"] = device_id
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+        assert device_id not in data_store.devices
+
+    def test_humidity_out_of_range_returns_422(self, client, admin_headers):
+        payload = _valid_import_payload()
+        payload["devices"][0]["readings"][0]["humidity"] = 101
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+
+    def test_battery_out_of_range_returns_422(self, client, admin_headers):
+        payload = _valid_import_payload()
+        payload["devices"][0]["readings"][0]["battery"] = -1
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize("temperature", [-100.1, 150.1])
+    def test_temperature_out_of_range_returns_422(self, client, admin_headers, temperature):
+        payload = _valid_import_payload()
+        payload["devices"][0]["readings"][0]["temperature"] = temperature
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+
+    def test_invalid_timestamp_returns_422(self, client, admin_headers):
+        payload = _valid_import_payload()
+        payload["devices"][0]["readings"][0]["timestamp"] = "bad"
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+
+    def test_invalid_last_updated_returns_422(self, client, admin_headers):
+        payload = _valid_import_payload()
+        payload["devices"][0]["last_updated"] = "bad"
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+
+    def test_device_name_too_long_returns_422(self, client, admin_headers):
+        payload = _valid_import_payload()
+        payload["devices"][0]["device_name"] = "a" * 129
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+
+    def test_too_many_devices_returns_422(self, client, admin_headers):
+        device = _valid_import_payload()["devices"][0]
+        payload = {"devices": [dict(device, device_id=f"device-{i}") for i in range(101)]}
+
+        response = client.post("/api/import", json=payload, headers=admin_headers)
+
+        assert response.status_code == 422
+        assert data_store.devices == {}
+
+
+class TestBackupEndpoint:
+    def test_backup_without_api_key_returns_401(self, client):
+        response = client.get("/api/backup")
+
+        assert response.status_code == 401
+
+    def test_backup_with_wrong_api_key_returns_401(self, client):
+        response = client.get("/api/backup", headers={"X-API-Key": "wrong-key"})
+
+        assert response.status_code == 401
+
+    def test_backup_when_admin_key_not_configured_returns_503(self, client, admin_headers, monkeypatch):
+        monkeypatch.setattr(main_module, "ADMIN_API_KEY", "")
+
+        response = client.get("/api/backup", headers=admin_headers)
+
+        assert response.status_code == 503
+
+    def test_backup_with_valid_api_key_returns_db(self, client, admin_headers):
+        response = client.get("/api/backup", headers=admin_headers)
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/x-sqlite3"
+        assert response.content.startswith(b"SQLite format 3")

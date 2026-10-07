@@ -15,10 +15,11 @@ import httpx
 from dotenv import load_dotenv
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.security import APIKeyHeader
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -28,6 +29,9 @@ DB_PATH = os.getenv("DB_PATH", "/data/app.db" if os.path.exists("/data") else "a
 SWITCHBOT_API_BASE = "https://api.switch-bot.com/v1.1"
 SWITCHBOT_TOKEN = os.getenv("SWITCHBOT_TOKEN", "")
 SWITCHBOT_SECRET = os.getenv("SWITCHBOT_SECRET", "")
+
+# 管理系 API（/api/import, /api/backup）用のキー。未設定なら管理系 API は 503 で無効化される（fail-closed）
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 
 DATA_COLLECTION_INTERVAL = 3600
 RATE_LIMIT_BACKOFF_BASE = 60
@@ -706,30 +710,53 @@ async def get_latency_stats_endpoint(
     return stats
 
 
+admin_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_admin(api_key: Optional[str] = Depends(admin_api_key_header)) -> None:
+    """管理系 API 用の認証。X-API-Key ヘッダが ADMIN_API_KEY と一致しない場合は拒否する。"""
+    if not ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="管理 API は無効です（サーバに ADMIN_API_KEY が設定されていません）",
+        )
+    # 非 ASCII 文字を含むヘッダでも例外にならないよう bytes で比較する
+    if not hmac.compare_digest((api_key or "").encode(), ADMIN_API_KEY.encode()):
+        raise HTTPException(
+            status_code=401,
+            detail="API キーが無効です",
+            headers={"WWW-Authenticate": "APIKey"},
+        )
+
+
+TEMPERATURE_MIN = -100
+TEMPERATURE_MAX = 150
+
+
 class ImportReadingData(BaseModel):
-    timestamp: str
-    temperature: float
-    humidity: int
-    battery: Optional[int] = None
+    timestamp: datetime
+    temperature: float = Field(ge=TEMPERATURE_MIN, le=TEMPERATURE_MAX)
+    humidity: int = Field(ge=0, le=100)
+    battery: Optional[int] = Field(default=None, ge=0, le=100)
 
 
 class ImportDeviceData(BaseModel):
-    device_id: str
-    device_name: str
-    device_type: str
-    hub_device_id: Optional[str] = None
-    current_temperature: Optional[float] = None
-    current_humidity: Optional[int] = None
-    battery: Optional[int] = None
-    last_updated: Optional[str] = None
-    readings: list[ImportReadingData] = []
+    device_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    device_name: str = Field(max_length=128)
+    device_type: str = Field(max_length=128)
+    hub_device_id: Optional[str] = Field(default=None, max_length=128)
+    current_temperature: Optional[float] = Field(default=None, ge=TEMPERATURE_MIN, le=TEMPERATURE_MAX)
+    current_humidity: Optional[int] = Field(default=None, ge=0, le=100)
+    battery: Optional[int] = Field(default=None, ge=0, le=100)
+    last_updated: Optional[datetime] = None
+    readings: list[ImportReadingData] = Field(default_factory=list, max_length=50000)
 
 
 class ImportData(BaseModel):
-    devices: list[ImportDeviceData]
+    devices: list[ImportDeviceData] = Field(max_length=100)
 
 
-@app.post("/api/import")
+@app.post("/api/import", dependencies=[Depends(require_admin)])
 async def import_data(data: ImportData):
     """Import historical data from another backend instance."""
     imported_devices = 0
@@ -745,7 +772,7 @@ async def import_data(data: ImportData):
             current_temperature=device_data.current_temperature,
             current_humidity=device_data.current_humidity,
             battery=device_data.battery,
-            last_updated=datetime.fromisoformat(device_data.last_updated.replace('Z', '+00:00')) if device_data.last_updated else None,
+            last_updated=device_data.last_updated,
         )
         
         data_store.devices[device.device_id] = device
@@ -758,7 +785,7 @@ async def import_data(data: ImportData):
         # Import readings
         for reading_data in device_data.readings:
             reading = MeterReading(
-                timestamp=datetime.fromisoformat(reading_data.timestamp.replace('Z', '+00:00')),
+                timestamp=reading_data.timestamp,
                 temperature=reading_data.temperature,
                 humidity=reading_data.humidity,
                 battery=reading_data.battery,
@@ -773,7 +800,7 @@ async def import_data(data: ImportData):
     }
 
 
-@app.get("/api/backup")
+@app.get("/api/backup", dependencies=[Depends(require_admin)])
 async def backup_database():
     """Download the SQLite database file for backup purposes."""
     if not os.path.exists(DB_PATH):
