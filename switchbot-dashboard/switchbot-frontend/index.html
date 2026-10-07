@@ -172,8 +172,8 @@
 
   </div>
 
-  <!-- jQuery 1.12.x -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+  <!-- jQuery 3.7.x（CVE-2015-9251 対策。Bootstrap 3 JS が動かないため jQuery 4 は不可） -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" integrity="sha384-1H217gwSVyLSIfaLxHbE7dRb3v4mYCKbpQvzx0cegeju1MVsGrX5xXxAvs/HgeFs" crossorigin="anonymous"></script>
 
   <!-- Bootstrap 3.3.7 JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
@@ -316,6 +316,8 @@
       $.ajax({
         url: API_URL + '/api/meters/refresh',
         type: 'POST',
+        // dataType を明示し、text/javascript 応答がスクリプトとして実行されないようにする
+        dataType: 'json',
         success: function(data) {
           if (callback) callback(null, data);
         },
@@ -636,17 +638,17 @@
     // Init
     // ============================================================
 
-    $(document).ready(function() {
+    $(function() {
       fetchData();
       setInterval(fetchData, REFRESH_INTERVAL);
 
-      $('#time-scale-select').change(function() {
+      $('#time-scale-select').on('change', function() {
         currentTimeScale = $(this).val();
         destroyAllCharts();
         renderCharts();
       });
 
-      $('#btn-refresh').click(function() {
+      $('#btn-refresh').on('click', function() {
         var $btn = $(this);
         $btn.prop('disabled', true).text('Refreshing...');
         triggerRefresh(function(err) {
@@ -658,7 +660,7 @@
         });
       });
 
-      $('#btn-backup').click(function() {
+      $('#btn-backup').on('click', function() {
         window.open(API_URL + '/api/backup', '_blank');
       });
     });
