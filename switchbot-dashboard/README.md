@@ -4,7 +4,8 @@ A fullstack web dashboard to monitor temperature readings from SwitchBot Meter d
 
 ## Features
 
-- Temperature charts for all SwitchBot Meter devices using Recharts
+- Temperature charts for all SwitchBot Meter devices using Chart.js (React)
+- Light / Dark / System theme switching
 - Time scale switching (hour/day/month/year)
 - Auto-refresh every 30 seconds (frontend) with background data collection every 2 minutes (backend)
 - Rate limiting protection with exponential backoff
@@ -41,27 +42,41 @@ A fullstack web dashboard to monitor temperature readings from SwitchBot Meter d
 
 ### Frontend
 
-1. Navigate to the frontend directory:
+React 19 + Vite + TypeScript + Chart.js 4 で構成されたシングルページアプリです。Node.js 20.19 以上（推奨 22）が必要です。
+
+1. フロントエンドのディレクトリに移動して依存関係をインストールします:
    ```bash
    cd switchbot-frontend
-   ```
-
-2. Install dependencies:
-   ```bash
    npm install
    ```
 
-3. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Start the development server:
+2. 開発サーバーを起動します（`/api` はローカルの FastAPI `http://localhost:8000` にプロキシされます）:
    ```bash
    npm run dev
    ```
 
-5. Open http://localhost:5173 in your browser
+   SwitchBot の認証情報が無い環境では、モックデータで UI を確認できます:
+   ```bash
+   npm run dev:mock
+   ```
+   `?scenario=unconfigured` / `?scenario=rate-limited` / `?scenario=error` を URL に付けると各状態を再現できます。
+
+3. http://localhost:5173 をブラウザで開きます。画面右上のボタンでテーマ（ライト / ダーク / システム）を切り替えられます。
+
+| コマンド | 内容 |
+| --- | --- |
+| `npm run build` | 本番ビルド（`dist/`）。データ取得先は `.env.production` の `VITE_API_BASE_URL` |
+| `npm run build:same-origin` | 配信元の FastAPI と同一オリジンの API を使うビルド |
+| `npm run lint` / `npm run typecheck` / `npm test` | oxlint / TypeScript / Vitest |
+
+#### FastAPI からビルド済みフロントエンドを配信する
+
+FastAPI は `switchbot-backend/static/` が存在すればその中身を `/` で配信します。Docker イメージではマルチステージビルドで `dist/` を `static/` にコピーします。ローカルでは次のようにシンボリックリンクを張ってからバックエンドを起動します:
+
+```bash
+cd switchbot-frontend && npm run build:same-origin && cd ..
+ln -sfn "$(pwd)/switchbot-frontend/dist" switchbot-backend/static
+```
 
 ## API Endpoints
 
