@@ -148,9 +148,12 @@ select {
 
 .navbar__right {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px 12px;
   margin-left: auto;
+  min-width: 0;
 }
 
 /* ---------- Theme switcher ---------- */
@@ -172,6 +175,7 @@ select {
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -187,6 +191,7 @@ select {
 
 /* ---------- Badges ---------- */
 .badge {
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -414,6 +419,26 @@ select {
   grid-template-columns: 1fr;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+@media (max-width: 575.98px) {
+  .navbar__inner {
+    gap: 8px 16px;
+    padding: 10px 12px;
+  }
+
+  .theme-switcher__btn {
+    padding: 4px 8px;
+  }
+
+  .theme-switcher__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 }
 
 @media (min-width: 768px) {
