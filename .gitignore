@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .venv/
 *.db
+.env
+node_modules/
+switchbot-dashboard/switchbot-backend/static
