@@ -55,14 +55,17 @@ export function useDashboardData(): DashboardData & { reload: () => Promise<void
   const api = useApi()
   const [data, setData] = useState<DashboardData>(INITIAL)
   const mounted = useRef(true)
+  // 自動更新と手動更新が重なったとき、最後に開始した取得の結果だけを反映する
+  const latestRequestId = useRef(0)
 
-  const reload = useCallback(
-    () =>
-      fetchDashboard(api).then((result) => {
-        if (mounted.current) setData((prev) => applyResult(prev, result))
-      }),
-    [api],
-  )
+  const reload = useCallback(() => {
+    const requestId = ++latestRequestId.current
+    return fetchDashboard(api).then((result) => {
+      if (mounted.current && requestId === latestRequestId.current) {
+        setData((prev) => applyResult(prev, result))
+      }
+    })
+  }, [api])
 
   useEffect(() => {
     mounted.current = true

@@ -42,7 +42,7 @@ A fullstack web dashboard to monitor temperature readings from SwitchBot Meter d
 
 ### Frontend
 
-React 19 + Vite + TypeScript + Chart.js 4 で構成されたシングルページアプリです。Node.js 20.19 以上（推奨 22）が必要です。
+React 19 + Vite + TypeScript + Chart.js 4 で構成されたシングルページアプリです。Node.js 22.22.2 以上（22 系）または 24.15.0 以上が必要です（テスト用の jsdom がこのバージョンを要求するため）。
 
 1. フロントエンドのディレクトリに移動して依存関係をインストールします:
    ```bash

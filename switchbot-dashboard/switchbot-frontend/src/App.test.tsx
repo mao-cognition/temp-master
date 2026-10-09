@@ -122,4 +122,28 @@ describe('App', () => {
     expect(document.documentElement.dataset.theme).toBe('light')
     expect(screen.getByRole('button', { name: /ライト/ })).toHaveAttribute('aria-pressed', 'true')
   })
+
+  it('遅れて返った古い取得結果で新しいデータを上書きしない', async () => {
+    let resolveFirst: (value: { meters: Meter[]; last_updated: string | null }) => void = () => {}
+    let call = 0
+    const api = client({
+      getMeters: () => {
+        call += 1
+        if (call === 1) {
+          return new Promise((resolve) => {
+            resolveFirst = resolve
+          })
+        }
+        return Promise.resolve({ meters: [fresh, stale], last_updated: fresh.last_updated })
+      },
+    })
+    renderApp(api)
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh Data' }))
+    expect(await screen.findByText('27.7°C')).toBeInTheDocument()
+
+    resolveFirst({ meters: [{ ...fresh, current_temperature: 20.5 }, stale], last_updated: fresh.last_updated })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.getByText('27.7°C')).toBeInTheDocument()
+    expect(screen.queryByText('20.5°C')).not.toBeInTheDocument()
+  })
 })
